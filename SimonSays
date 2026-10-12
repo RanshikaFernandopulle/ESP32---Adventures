@@ -1,0 +1,410 @@
+
+const int ledPins[4] = {
+  25,   // Red
+  26,   // Yellow
+  27,   // Green
+  32    // Blue
+};
+
+// Buttons
+const int buttonPins[4] = {
+  13,   // Red
+  14,   // Yellow
+  12,   // Green
+  15    // Blue
+};
+
+// Buzzer
+const int buzzerPin = 33;
+
+// Game settings
+int sequence[100];
+int level = 1;
+
+const int MAX_LEVEL = 10;
+
+// ------------------------------------------
+// SETUP
+// ------------------------------------------
+
+void setup()
+{
+  Serial.begin(115200);
+
+  // Set LED pins as outputs
+  for (int i = 0; i < 4; i++)
+  {
+    pinMode(ledPins[i], OUTPUT);
+    digitalWrite(ledPins[i], LOW);
+  }
+
+  // Set button pins as inputs
+  for (int i = 0; i < 4; i++)
+  {
+    pinMode(buttonPins[i], INPUT_PULLUP);
+  }
+
+  // Buzzer
+  pinMode(buzzerPin, OUTPUT);
+  digitalWrite(buzzerPin, LOW);
+
+  // Random number generator
+  randomSeed(analogRead(34));
+
+  Serial.println("================================");
+  Serial.println("       ESP32 SIMON SAYS");
+  Serial.println("================================");
+
+  Serial.println("Press the RED button to start!");
+
+  // Make sure everything is off
+  turnOffLEDs();
+}
+
+// ------------------------------------------
+// MAIN LOOP
+// ------------------------------------------
+
+void loop()
+{
+  // Wait for player to start the game
+  waitForStart();
+
+  // Start a new game
+  startGame();
+
+  // Play the game
+  while (level <= MAX_LEVEL)
+  {
+    Serial.print("Level: ");
+    Serial.println(level);
+
+    // Show Simon's sequence
+    showSequence();
+
+    // Let player repeat it
+    if (getPlayerInput())
+    {
+      Serial.println("Correct!");
+
+      // Small success beep
+      beep(100);
+
+      level++;
+
+      delay(700);
+    }
+    else
+    {
+      // Player made a mistake
+      gameOver();
+
+      // Stop this game
+      break;
+    }
+  }
+
+  // If player reached MAX_LEVEL
+  if (level > MAX_LEVEL)
+  {
+    winGame();
+  }
+
+  // Game has ended.
+  // loop() now returns to waitForStart()
+}
+
+// ------------------------------------------
+// WAIT FOR START
+// ------------------------------------------
+
+void waitForStart()
+{
+  Serial.println("Waiting for START...");
+
+  // Slowly blink the red LED
+  while (true)
+  {
+    digitalWrite(ledPins[0], HIGH);
+    delay(300);
+    digitalWrite(ledPins[0], LOW);
+    delay(300);
+
+    // Red button pressed?
+    if (digitalRead(buttonPins[0]) == LOW)
+    {
+      // Debounce
+      delay(30);
+
+      // Wait until button is released
+      while (digitalRead(buttonPins[0]) == LOW)
+      {
+        delay(5);
+      }
+
+      Serial.println("START!");
+
+      // Start animation
+      startAnimation();
+
+      return;
+    }
+  }
+}
+
+// ------------------------------------------
+// START GAME
+// ------------------------------------------
+
+void startGame()
+{
+  level = 1;
+
+  // Generate random sequence
+  for (int i = 0; i < MAX_LEVEL; i++)
+  {
+    sequence[i] = random(0, 4);
+  }
+
+  Serial.println("New game!");
+}
+
+// ------------------------------------------
+// START ANIMATION
+// ------------------------------------------
+
+void startAnimation()
+{
+  // Light all LEDs
+  for (int i = 0; i < 4; i++)
+  {
+    digitalWrite(ledPins[i], HIGH);
+  }
+
+  beep(200);
+
+  delay(300);
+
+  turnOffLEDs();
+
+  delay(300);
+
+  // Lights sweep across
+  for (int i = 0; i < 4; i++)
+  {
+    digitalWrite(ledPins[i], HIGH);
+    beep(80);
+    delay(100);
+    digitalWrite(ledPins[i], LOW);
+  }
+
+  delay(500);
+}
+
+// ------------------------------------------
+// SHOW SEQUENCE
+// ------------------------------------------
+
+void showSequence()
+{
+  delay(600);
+
+  for (int i = 0; i < level; i++)
+  {
+    int color = sequence[i];
+
+    lightLED(color);
+
+    delay(350);
+
+    turnOffLEDs();
+
+    delay(180);
+  }
+}
+
+// ------------------------------------------
+// GET PLAYER INPUT
+// ------------------------------------------
+
+bool getPlayerInput()
+{
+  for (int i = 0; i < level; i++)
+  {
+    int pressedButton = waitForButton();
+
+    // Light the button's LED
+    lightLED(pressedButton);
+
+    delay(250);
+
+    turnOffLEDs();
+
+    // Check answer
+    if (pressedButton != sequence[i])
+    {
+      return false;
+    }
+
+    delay(100);
+  }
+
+  return true;
+}
+
+// ------------------------------------------
+// WAIT FOR BUTTON
+// ------------------------------------------
+
+int waitForButton()
+{
+  while (true)
+  {
+    for (int i = 0; i < 4; i++)
+    {
+      if (digitalRead(buttonPins[i]) == LOW)
+      {
+        // Debounce
+        delay(30);
+
+        // Wait for release
+        while (digitalRead(buttonPins[i]) == LOW)
+        {
+          delay(5);
+        }
+
+        return i;
+      }
+    }
+  }
+}
+
+// ------------------------------------------
+// LIGHT LED
+// ------------------------------------------
+
+void lightLED(int color)
+{
+  digitalWrite(ledPins[color], HIGH);
+
+  beep(100);
+}
+
+// ------------------------------------------
+// TURN OFF ALL LEDs
+// ------------------------------------------
+
+void turnOffLEDs()
+{
+  for (int i = 0; i < 4; i++)
+  {
+    digitalWrite(ledPins[i], LOW);
+  }
+}
+
+// ------------------------------------------
+// BUZZER
+// ------------------------------------------
+
+void beep(int duration)
+{
+  digitalWrite(buzzerPin, HIGH);
+
+  delay(duration);
+
+  digitalWrite(buzzerPin, LOW);
+}
+
+// ------------------------------------------
+// GAME OVER
+// ------------------------------------------
+
+void gameOver()
+{
+  Serial.println();
+  Serial.println("******** GAME OVER ********");
+
+  Serial.print("Final score: ");
+  Serial.println(level - 1);
+
+  // Three warning flashes
+  for (int i = 0; i < 3; i++)
+  {
+    for (int j = 0; j < 4; j++)
+    {
+      digitalWrite(ledPins[j], HIGH);
+    }
+
+    beep(150);
+
+    turnOffLEDs();
+
+    delay(150);
+  }
+
+  // Final long flash
+  for (int j = 0; j < 4; j++)
+  {
+    digitalWrite(ledPins[j], HIGH);
+  }
+
+  beep(500);
+
+  turnOffLEDs();
+
+  delay(1000);
+
+  Serial.println("GAME ENDED.");
+  Serial.println("Press RED to play again.");
+}
+
+// ------------------------------------------
+// WIN GAME
+// ------------------------------------------
+
+void winGame()
+{
+  Serial.println();
+  Serial.println("******** YOU WIN! ********");
+
+  // Celebration animation
+  for (int round = 0; round < 3; round++)
+  {
+    for (int i = 0; i < 4; i++)
+    {
+      turnOffLEDs();
+
+      digitalWrite(ledPins[i], HIGH);
+
+      beep(100);
+
+      delay(100);
+    }
+
+    for (int i = 2; i >= 0; i--)
+    {
+      turnOffLEDs();
+
+      digitalWrite(ledPins[i], HIGH);
+
+      beep(100);
+
+      delay(100);
+    }
+  }
+
+  // All LEDs on
+  for (int i = 0; i < 4; i++)
+  {
+    digitalWrite(ledPins[i], HIGH);
+  }
+
+  beep(600);
+
+  turnOffLEDs();
+
+  delay(1000);
+
+  Serial.println("GAME ENDED.");
+  Serial.println("Press RED to play again.");
+}
